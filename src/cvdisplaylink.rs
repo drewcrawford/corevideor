@@ -39,10 +39,17 @@ extern "C" {
 }
 
 impl CVDisplayLink {
-    pub fn set_output_callback(&mut self, callback: CVDisplayLinkOutputCallback, user_info: *mut c_void) -> Result<(),CVReturn> {
-        let r = unsafe {
-            CVDisplayLinkSetOutputCallback(self, callback, user_info)
-        };
+    /// see also: [set_output_callback_unchecked]
+    pub fn set_output_callback<U: Sync>(&mut self, callback: CVDisplayLinkOutputCallback, user_info: *mut U) -> Result<(),CVReturn> {
+        unsafe{ self.set_output_callback_unchecked(callback, user_info) }
+    }
+    ///A slightly relaxed version of set_output_callback that only requires Send.
+    ///
+    /// # Safety
+    /// You must ensure that the type can be shared between threads safely, even though it isn't marked `Sync`.
+    pub unsafe fn set_output_callback_unchecked<U>(&mut self, callback: CVDisplayLinkOutputCallback, user_info: *mut U) -> Result<(),CVReturn> {
+        let r =
+            CVDisplayLinkSetOutputCallback(self, callback, user_info as *mut c_void);
         match r {
             CVReturn::Success => Ok(()),
             other => Err(other)
@@ -111,7 +118,7 @@ impl DerefMut for Managed {
 
     }
     #[test] fn smoke_test() {
-        let (sender,receiver) = std::sync::mpsc::channel::<()>();
+        let (mut sender,receiver) = std::sync::mpsc::channel::<()>();
         let mut m = Managed::with_active_displays().unwrap();
         extern "C" fn callback(display_link: *mut CVDisplayLink, in_now: *const CVTimeStamp, in_output_time: *const CVTimeStamp,flags_in: CVOptionFlags, flags_out: *mut CVOptionFlags, display_link_context: *mut c_void) -> CVReturn {
             println!("Hello from callback");
@@ -119,7 +126,9 @@ impl DerefMut for Managed {
             context.send(()).unwrap();
             CVReturn::Success
         }
-        m.set_output_callback(callback, unsafe{ std::mem::transmute(&sender) }).unwrap();
+        unsafe {
+            m.set_output_callback_relaxed(callback, &mut sender).unwrap();
+        }
 
         //todo: get the actually correct display rather than this hardcoded value?
         m.set_current_cg_display(0).unwrap();

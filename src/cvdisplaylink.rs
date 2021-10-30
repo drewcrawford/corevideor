@@ -39,7 +39,7 @@ extern "C" {
 }
 
 impl CVDisplayLink {
-    /// see also: [set_output_callback_unchecked]
+    /// see also: [CVDisplayLink::set_output_callback_unchecked]
     pub fn set_output_callback<U: Sync>(&mut self, callback: CVDisplayLinkOutputCallback, user_info: *mut U) -> Result<(),CVReturn> {
         unsafe{ self.set_output_callback_unchecked(callback, user_info) }
     }
@@ -110,7 +110,6 @@ impl DerefMut for Managed {
     use crate::cvbase::{CVTimeStamp, CVOptionFlags};
     use std::ffi::c_void;
     use crate::cvreturn::CVReturn;
-    use std::sync::Arc;
 
     #[test] fn new() {
         let m = Managed::with_active_displays().unwrap();
@@ -120,14 +119,14 @@ impl DerefMut for Managed {
     #[test] fn smoke_test() {
         let (mut sender,receiver) = std::sync::mpsc::channel::<()>();
         let mut m = Managed::with_active_displays().unwrap();
-        extern "C" fn callback(display_link: *mut CVDisplayLink, in_now: *const CVTimeStamp, in_output_time: *const CVTimeStamp,flags_in: CVOptionFlags, flags_out: *mut CVOptionFlags, display_link_context: *mut c_void) -> CVReturn {
+        extern "C" fn callback(_display_link: *mut CVDisplayLink, _in_now: *const CVTimeStamp, _in_output_time: *const CVTimeStamp,_flags_in: CVOptionFlags, _flags_out: *mut CVOptionFlags, display_link_context: *mut c_void) -> CVReturn {
             println!("Hello from callback");
             let context : &std::sync::mpsc::Sender<()> = unsafe{ std::mem::transmute(display_link_context) };
             context.send(()).unwrap();
             CVReturn::Success
         }
         unsafe {
-            m.set_output_callback_relaxed(callback, &mut sender).unwrap();
+            m.set_output_callback_unchecked(callback, &mut sender).unwrap();
         }
 
         //todo: get the actually correct display rather than this hardcoded value?
